@@ -1,3 +1,4 @@
+
 好的，那么元语法实际上在文档末尾提供了。
 
 你可以跳到末尾，看完再回来。
@@ -180,6 +181,33 @@ def NAME {
 | 均未命中 | 进入空块（值 `null`，体 `{}`）。空块**不是**父节点 |
 
 > **约束：** 节点自身、子节点、兄弟节点均不与父节点重名，保证父节点匹配始终无歧义。
+
+### `.` / `..` Resolution Rules
+
+> **`.` looks down; if not found, looks up to a parent of the same name.**
+> **`..` looks sideways; if not found, looks up to a parent of the same name.**
+> **A parent's name must not conflict with the node itself, its children, or its siblings — making the fallback unambiguous.**
+
+---
+
+**`.` resolves within the node's visible scope (children + parent's name):**
+
+| Match | Result |
+|---|---|
+| A child | Enters that child |
+| The parent's name | Enters the parent |
+| Nothing | Enters an empty block (value `null`, body `{}`). The empty block is **not** the parent |
+
+**`..` resolves within the node's visible scope (siblings + parent's name):**
+
+| Match | Result |
+|---|---|
+| A sibling | Enters that sibling |
+| The parent's name | Enters the parent |
+| Nothing | Enters an empty block (value `null`, body `{}`). The empty block is **not** the parent |
+
+> **Constraint:** a node's own name, its children, and its siblings must not equal the parent's name, ensuring the parent match is always unambiguous.
+
 ---
 
 ## 赋值与拷贝
@@ -375,4 +403,76 @@ def ident {
 */
 
 def def_rule {
-    "def"; ident; "{"; alt (N = [0
+    "def"; ident; "{"; alt (N = [0,1]); "}";
+    ("not"; "{"; alt; "}";) (N = [0,1]);
+    ";";
+};
+
+// not 块：前一个匹配完成后，同一个 TOKEN 流
+// 会与 not 块的 alt 进行匹配。
+// 若 not 块完全匹配，则前一个匹配被视为失败。
+
+def alt {
+    seq (N >= 1);
+    ("/"; seq (N >= 1);) (N >= 0);
+};
+
+// / 表示有序选择
+
+def seq {
+    (
+        ident;
+        / "\""; any_char; "\"";
+        / paren;
+    );
+    quant (N = [0,1]);
+    / "nospace";
+    ";";
+};
+
+def paren {
+    "("; alt (N >= 1); ")";
+};
+
+def quant_term {
+    "N";
+    (
+        (">"; / "<"; / ">="; / "<=";); digit_seq;
+        / "="; (
+            digit_seq;
+            / "["; digit_seq (N >= 1); (","; digit_seq;) (N >= 0); "]";
+            // 此处方括号表示集合，而非区间。
+        );
+    );
+};
+
+def quant {
+    "("; quant_term; (","; quant_term;) (N >= 0); ")";
+};
+
+def comment_rule {
+    "/*"; any_char (N >= 0); "*/";
+    / "//"; any_char (N >= 0); newline;
+};
+/* newline：--- 未定义 --- 内置 TOKEN；匹配换行符。 */
+```
+
+---
+
+## 未定义 TOKEN 汇总
+
+| TOKEN | 所在位置 | 说明 |
+|---|---|---|
+| `KEYWORD_SET` | IDENTIFIER 的 `not` 块 | 由实现提供的一组保留语言关键字 |
+| `ANY_STR` | COMMENT | 匹配除终止符外的任意字符序列；由词法层实现 |
+| `any_char` | STRING、comment_rule | 内置 — 匹配任意单个字符（EOF 除外） |
+| `alpha` | 元语法 `ident` | 内置 — 匹配单个 ASCII 字母 |
+| `cjk_char` | 元语法 `ident` | 内置 — 匹配单个 CJK 字符 |
+| `digit_seq` | 元语法 `quant_term`、`ident` | 内置 — 匹配连续数字 |
+| `newline` | 元语法 `comment_rule` | 内置 — 匹配换行符 |
+
+---
+
+这并非全部。
+
+我回复可能不够及时 — 上网时间有限。
