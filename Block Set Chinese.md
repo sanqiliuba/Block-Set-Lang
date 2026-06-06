@@ -50,6 +50,10 @@ def BODY_BLOCK {
     "{"; STMT (N >= 0); "}";
 };
 
+def BODY_BLOCK_STMT {
+    BODY_BLOCK; END;
+};
+
 def PAREN_BLOCK {
     "("; STMT (N >= 1); ")";
 };
@@ -70,7 +74,6 @@ def END {
 ```Block Set Def
 def STMT {
       BLOCK_STMT;
-    / BODY_BLOCK;
     / VAR_STMT;
     / ASSIGN_STMT;
     / COPY_STMT;
@@ -83,6 +86,7 @@ def STMT {
     / BACK_STMT;
     / PATH_STMT;
     / COMMENT;
+    / BODY_BLOCK_STMT;
 };
 ```
 
@@ -95,6 +99,10 @@ def BLOCK_STMT {
     "block"; IDENTIFIER; BRACKET_PARAMS (N = [1,0]); STMT; END;
 };
 
+def BACK_STMT {
+    "back"; END;
+};
+
 def BRACKET_PARAMS {
     "["; DECL; (","; DECL;)(N >= 0); "]";
 };
@@ -104,14 +112,15 @@ def DECL {
 };
 
 def TYPE {
-    NAME;
+    CHAIN;
 };
 
 /*
-  TYPE 解析为 NAME。
+  TYPE 解析为 CHAIN 返回的 block 的 var 与方括号声明的数据结构。
   一些基本类型（如 Int、String）由系统提供。
   在此之外，每个 block 的结构本身就是一个类型 —
   不存在单独的类型定义语法。
+  它决定什么通过<-传递。
 */
 
 def VAR_STMT {
@@ -119,110 +128,19 @@ def VAR_STMT {
 };
 ```
 
-一个 block 同时携带**值**和**体**——使用哪一个取决于上下文。`STMT` 是 block 的体。
-
-*`var` 语句必须出现在 `block` 语句的 `STMT` 内，用于声明可写变量。*
-
-*只有在 `BRACKET_PARAMS` 处声明的变量才可作为函数式调用时的位置参数。*
-
-*block 也是一个命名空间。如果一个 `block` 语句嵌套在另一个 `block` 语句内部，路径关系会自动形成。*
-
----
-
-## 路径 / 命名空间
-
-```Block Set Def
-def PATH_STMT {
-    NAME; STMT; END;
-};
-
-def AT_PATH {
-      "@"; ("."; / "..";)(N = [1,0]); PATH_SEGMENT (N = [1,0]);
-    / "$"; ("."; / "..";)(N = [1,0]); PATH_SEGMENT (N = [1,0]);
-};
-
-def PATH_SEGMENT {
-    IDENTIFIER; (("."; / "..";); IDENTIFIER;)(N >= 0);
-};
-
-def NAME {
-    AT_PATH; / PATH_SEGMENT; / IDENTIFIER;
-};
-```
-
-*在 `PATH_STMT` 或 `BLOCK_STMT` 内部，`@` 表示该语句的 `NAME` 已遍历的路径。*
-
-* `@` 指向当前 block（该语句所在的 block）。
-* `$` 指向根 block（文件的隐式最外层 block）。
-  `$` 不受嵌套深度或名称遮蔽的影响。
-
-### `.` / `..` 解析规则
-
-> **`.` 往下找，找不到就往上找同名父。**
-> **`..` 往旁边找，找不到就往上找同名父。**
-> **父名不与子、兄弟、自己重名，保证兜底时无歧义。**
-
----
-
-**`.` 在当前节点的可见范围（子节点 + 父节点名）内匹配：**
-
-| 命中 | 行为 |
-|---|---|
-| 子节点 | 进入该子节点 |
-| 父节点名 | 进入父节点 |
-| 均未命中 | 进入空块（值 `null`，体 `{}`）。空块**不是**父节点 |
-
-**`..` 在当前节点的可见范围（兄弟节点 + 父节点名）内匹配：**
-
-| 命中 | 行为 |
-|---|---|
-| 兄弟节点 | 进入该兄弟节点 |
-| 父节点名 | 进入父节点 |
-| 均未命中 | 进入空块（值 `null`，体 `{}`）。空块**不是**父节点 |
-
-> **约束：** 节点自身、子节点、兄弟节点均不与父节点重名，保证父节点匹配始终无歧义。
-
-### `.` / `..` Resolution Rules
-
-> **`.` looks down; if not found, looks up to a parent of the same name.**
-> **`..` looks sideways; if not found, looks up to a parent of the same name.**
-> **A parent's name must not conflict with the node itself, its children, or its siblings — making the fallback unambiguous.**
-
----
-
-**`.` resolves within the node's visible scope (children + parent's name):**
-
-| Match | Result |
-|---|---|
-| A child | Enters that child |
-| The parent's name | Enters the parent |
-| Nothing | Enters an empty block (value `null`, body `{}`). The empty block is **not** the parent |
-
-**`..` resolves within the node's visible scope (siblings + parent's name):**
-
-| Match | Result |
-|---|---|
-| A sibling | Enters that sibling |
-| The parent's name | Enters the parent |
-| Nothing | Enters an empty block (value `null`, body `{}`). The empty block is **not** the parent |
-
-> **Constraint:** a node's own name, its children, and its siblings must not equal the parent's name, ensuring the parent match is always unambiguous.
-
 ---
 
 ## 赋值与拷贝
 
 ```Block Set Def
 def ASSIGN_STMT {
-    NAME; "<-"; VALUE; END;
+    CHAIN; "<-"; BLOCK; END;
 };
 
 def COPY_STMT {
-    NAME; "#"; VALUE; END;
+    CHAIN; "#"; BLOCK; END;
 };
 ```
-
-*`#` 从源深度拷贝所有 `var` 和值槽，将它们覆盖写入目标路径。覆盖是完全的，包括所有下级 block。*
 
 ---
 
@@ -230,23 +148,11 @@ def COPY_STMT {
 
 ```Block Set Def
 def CALL_STMT {
-    "call"; NAME; END;
-};
-
-def PAREN_CALL {
-    NAME; PAREN_BLOCK;
-};
-
-def BRACKET_CALL {
-    NAME; ARG_LIST;
+    "call"; BLOCK; END;
 };
 
 def ARG_LIST {
-    "["; (VALUE; (","; VALUE;)(N >= 0);)(N = [1,0]); "]";
-};
-
-def BACK_STMT {
-    "back"; END;
+    "["; (BLOCK; (","; BLOCK;)(N >= 0);)(N = [1,0]); "]";
 };
 
 /* ---- 丢弃返回值的独立调用 ---- */
@@ -255,20 +161,21 @@ def CHAIN_STMT {
 };
 
 def CHAIN {
-    CHAIN_ATOM;
-    ("."; IDENTIFIER; (ARG_LIST; / PAREN_BLOCK;)(N = [0,1]);)(N >= 0);
+    (IDENTIFIER; / "$"; / "@";); (PAREN_BLOCK; / ARG_LIST)(N = [1,0]);
+    (("."; / "..";) IDENTIFIER; (PAREN_BLOCK; / ARG_LIST)(N = [1,0]);)(N >= 0);
 };
 
-def CHAIN_ATOM {
-    PAREN_CALL;
-    / BRACKET_CALL;
-    / NAME;
+def BLOCK {
+      STMT;
+    / VALUE;
+    / CHAIN;
+    / BODY_BLOCK;
+}
+
+def PATH_STMT {
+    CHAIN; BODY_BLOCK; END;
 };
 ```
-
-*`PAREN_CALL` 和 `BRACKET_CALL` 会立即创建 block 的副本，执行后返回其值（若位置允许），然后丢弃副本。*
-
-*返回值是 block 本身。*
 
 ---
 
@@ -277,16 +184,16 @@ def CHAIN_ATOM {
 ```Block Set Def
 def IF_STMT {
     "if"; VALUE;
-        STMT;
+        BLOCK;
     ("elseif"; VALUE;
-        STMT;)(N >= 0);
+        BLOCK;)(N >= 0);
     ("else";
-        STMT;)(N = [0,1]);
+        BLOCK;)(N = [0,1]);
     END;
 };
 
 def LOOP_STMT {
-    "loop"; LOOP_LABEL (N = [0,1]); "|"; STMT; END;
+    "loop"; LOOP_LABEL (N = [0,1]); "|"; BLOCK; END;
 };
 
 def BREAK_STMT {
@@ -370,7 +277,7 @@ def UNARY_PREFIX {
 
 /* ---- 原子 ---- */
 def PRIMARY {
-    NUMBER;
+      NUMBER;
     / STRING;
     / CHAIN;
     / ("("; VALUE; ")";);
