@@ -72,8 +72,13 @@ def END {
 *By convention, the `block` named `main` is the main program.*
 
 ```Block Set Def
+def COMPILER {
+    "compiler"; STRING; END;
+};
+
 def STMT {
-      BLOCK_STMT;
+      COMPILER;
+    / BLOCK_STMT;
     / VAR_STMT;
     / ASSIGN_STMT;
     / COPY_STMT;
