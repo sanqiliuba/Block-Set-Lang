@@ -101,7 +101,9 @@ def STMT {
 
 ```Block Set Def
 def BLOCK_STMT {
-    "block"; IDENTIFIER; BRACKET_PARAMS (N = [1,0]); STMT; END;
+    "block"; IDENTIFIER; BRACKET_PARAMS (N = [0,1]);
+    (":"; TYPE;)(N = [0,1]);
+    BODY_BLOCK; END;
 };
 
 def BACK_STMT {
