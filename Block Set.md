@@ -136,12 +136,12 @@ def PATH_STMT {
 };
 
 def AT_PATH {
-      "@"; "."(N = [1,0]); PATH_SEGMENT (N = [1,0]);
-    / "$"; "."(N = [1,0]); PATH_SEGMENT (N = [1,0]);
+      "@"; ("."; / "..";)(N = [1,0]); PATH_SEGMENT (N = [1,0]);
+    / "$"; ("."; / "..";)(N = [1,0]); PATH_SEGMENT (N = [1,0]);
 };
 
 def PATH_SEGMENT {
-    IDENTIFIER; ("."; IDENTIFIER;)(N >= 0);
+    IDENTIFIER; (("."; / "..";); IDENTIFIER;)(N >= 0);
 };
 
 def NAME {
@@ -154,8 +154,33 @@ def NAME {
 * `@` refers to the current block (the block in which the statement appears).
 * `$` refers to the root block (the implicit outermost block of the file).
   `$` is unaffected by nesting depth or name shadowing.
-* `.` also resolves against sibling and parent blocks, climbing upward
-  until the name is found. `$` overrides this and starts from the root.
+
+### `.` / `..` Resolution Rules
+
+> **`.` looks down; if not found, looks up to a parent of the same name.**
+> **`..` looks sideways; if not found, looks up to a parent of the same name.**
+> **A parent's name must not conflict with the node itself, its children, or its siblings — making the fallback unambiguous.**
+
+---
+
+**`.` resolves within the node's visible scope (children + parent's name):**
+
+| Match | Result |
+|---|---|
+| A child | Enters that child |
+| The parent's name | Enters the parent |
+| Nothing | Enters an empty block (value `null`, body `{}`). The empty block is **not** the parent |
+
+**`..` resolves within the node's visible scope (siblings + parent's name):**
+
+| Match | Result |
+|---|---|
+| A sibling | Enters that sibling |
+| The parent's name | Enters the parent |
+| Nothing | Enters an empty block (value `null`, body `{}`). The empty block is **not** the parent |
+
+> **Constraint:** a node's own name, its children, and its siblings must not equal the parent's name, ensuring the parent match is always unambiguous.
+
 ---
 
 ## Assignment & Copy
