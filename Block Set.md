@@ -136,8 +136,8 @@ def PATH_STMT {
 };
 
 def AT_PATH {
-      "@"; PATH_SEGMENT (N = [1,0]);
-    / "$"; PATH_SEGMENT (N = [1,0]);
+      "@"; "."(N = [1,0]); PATH_SEGMENT (N = [1,0]);
+    / "$"; "."(N = [1,0]); PATH_SEGMENT (N = [1,0]);
 };
 
 def PATH_SEGMENT {
