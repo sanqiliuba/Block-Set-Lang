@@ -1,4 +1,5 @@
-Okay, then the metagrammar is actually provided at the end of the document.
+
+Okay, then the meta-grammar is actually provided at the end of the document.
 
 You can skip to the end and come back after you finish watching.
 
@@ -49,6 +50,10 @@ def BODY_BLOCK {
     "{"; STMT (N >= 0); "}";
 };
 
+def BODY_BLOCK_STMT {
+    BODY_BLOCK; END;
+};
+
 def PAREN_BLOCK {
     "("; STMT (N >= 1); ")";
 };
@@ -69,7 +74,6 @@ def END {
 ```Block Set Def
 def STMT {
       BLOCK_STMT;
-    / BODY_BLOCK;
     / VAR_STMT;
     / ASSIGN_STMT;
     / COPY_STMT;
@@ -82,6 +86,7 @@ def STMT {
     / BACK_STMT;
     / PATH_STMT;
     / COMMENT;
+    / BODY_BLOCK_STMT;
 };
 ```
 
@@ -94,6 +99,10 @@ def BLOCK_STMT {
     "block"; IDENTIFIER; BRACKET_PARAMS (N = [1,0]); STMT; END;
 };
 
+def BACK_STMT {
+    "back"; END;
+};
+
 def BRACKET_PARAMS {
     "["; DECL; (","; DECL;)(N >= 0); "]";
 };
@@ -103,14 +112,16 @@ def DECL {
 };
 
 def TYPE {
-    NAME;
+    CHAIN;
 };
 
 /*
-  TYPE resolves to NAME.
+  TYPE resolves to the data structure of the block returned by CHAIN —
+  its var declarations and bracket parameters.
   Some base types (e.g., Int, String) are provided by the system.
   Beyond those, every block's structure is itself a type —
   there is no separate type definition syntax.
+  It determines what can be passed via <-.
 */
 
 def VAR_STMT {
@@ -118,84 +129,19 @@ def VAR_STMT {
 };
 ```
 
-A block carries both a **value** and a **body** — which one is used depends on context. `STMT` is the body of the block.
-
-*The `var` statement must appear within the `STMT` of a `block` statement, and is used to declare writable variables.*
-
-*Only variables declared at `BRACKET_PARAMS` serve as positional parameters during functional invocation.*
-
-*A block is also a namespace. If a `block` statement is nested inside another `block` statement, a path relationship is automatically formed.*
-
----
-
-## Path / Namespace
-
-```Block Set Def
-def PATH_STMT {
-    NAME; STMT; END;
-};
-
-def AT_PATH {
-      "@"; ("."; / "..";)(N = [1,0]); PATH_SEGMENT (N = [1,0]);
-    / "$"; ("."; / "..";)(N = [1,0]); PATH_SEGMENT (N = [1,0]);
-};
-
-def PATH_SEGMENT {
-    IDENTIFIER; (("."; / "..";); IDENTIFIER;)(N >= 0);
-};
-
-def NAME {
-    AT_PATH; / PATH_SEGMENT; / IDENTIFIER;
-};
-```
-
-*Inside a `PATH_STMT` or `BLOCK_STMT`, `@` represents the path that the statement's `NAME` has already traversed.*
-
-* `@` refers to the current block (the block in which the statement appears).
-* `$` refers to the root block (the implicit outermost block of the file).
-  `$` is unaffected by nesting depth or name shadowing.
-
-### `.` / `..` Resolution Rules
-
-> **`.` looks down; if not found, looks up to a parent of the same name.**
-> **`..` looks sideways; if not found, looks up to a parent of the same name.**
-> **A parent's name must not conflict with the node itself, its children, or its siblings — making the fallback unambiguous.**
-
----
-
-**`.` resolves within the node's visible scope (children + parent's name):**
-
-| Match | Result |
-|---|---|
-| A child | Enters that child |
-| The parent's name | Enters the parent |
-| Nothing | Enters an empty block (value `null`, body `{}`). The empty block is **not** the parent |
-
-**`..` resolves within the node's visible scope (siblings + parent's name):**
-
-| Match | Result |
-|---|---|
-| A sibling | Enters that sibling |
-| The parent's name | Enters the parent |
-| Nothing | Enters an empty block (value `null`, body `{}`). The empty block is **not** the parent |
-
-> **Constraint:** a node's own name, its children, and its siblings must not equal the parent's name, ensuring the parent match is always unambiguous.
-
 ---
 
 ## Assignment & Copy
 
 ```Block Set Def
 def ASSIGN_STMT {
-    NAME; "<-"; VALUE; END;
+    CHAIN; "<-"; BLOCK; END;
 };
 
 def COPY_STMT {
-    NAME; "#"; VALUE; END;
+    CHAIN; "#"; BLOCK; END;
 };
 ```
-
-*`#` deep-copies all `var` and value slots from the source, overwriting them into the destination path. The overwrite is complete, including subordinate blocks.*
 
 ---
 
@@ -203,23 +149,11 @@ def COPY_STMT {
 
 ```Block Set Def
 def CALL_STMT {
-    "call"; NAME; END;
-};
-
-def PAREN_CALL {
-    NAME; PAREN_BLOCK;
-};
-
-def BRACKET_CALL {
-    NAME; ARG_LIST;
+    "call"; BLOCK; END;
 };
 
 def ARG_LIST {
-    "["; (VALUE; (","; VALUE;)(N >= 0);)(N = [1,0]); "]";
-};
-
-def BACK_STMT {
-    "back"; END;
+    "["; (BLOCK; (","; BLOCK;)(N >= 0);)(N = [1,0]); "]";
 };
 
 /* ---- Standalone call that discards the return value ---- */
@@ -228,20 +162,21 @@ def CHAIN_STMT {
 };
 
 def CHAIN {
-    CHAIN_ATOM;
-    ("."; IDENTIFIER; (ARG_LIST; / PAREN_BLOCK;)(N = [0,1]);)(N >= 0);
+    (IDENTIFIER; / "$"; / "@";); (PAREN_BLOCK; / ARG_LIST)(N = [1,0]);
+    (("."; / "..";) IDENTIFIER; (PAREN_BLOCK; / ARG_LIST)(N = [1,0]);)(N >= 0);
 };
 
-def CHAIN_ATOM {
-    PAREN_CALL;
-    / BRACKET_CALL;
-    / NAME;
+def BLOCK {
+      STMT;
+    / VALUE;
+    / CHAIN;
+    / BODY_BLOCK;
+}
+
+def PATH_STMT {
+    CHAIN; BODY_BLOCK; END;
 };
 ```
-
-*Both `PAREN_CALL` and `BRACKET_CALL` immediately create a copy of the block, return its value after execution (if the position permits), and then discard the copy.*
-
-*The returned is the block itself.*
 
 ---
 
@@ -250,16 +185,16 @@ def CHAIN_ATOM {
 ```Block Set Def
 def IF_STMT {
     "if"; VALUE;
-        STMT;
+        BLOCK;
     ("elseif"; VALUE;
-        STMT;)(N >= 0);
+        BLOCK;)(N >= 0);
     ("else";
-        STMT;)(N = [0,1]);
+        BLOCK;)(N = [0,1]);
     END;
 };
 
 def LOOP_STMT {
-    "loop"; LOOP_LABEL (N = [0,1]); "|"; STMT; END;
+    "loop"; LOOP_LABEL (N = [0,1]); "|"; BLOCK; END;
 };
 
 def BREAK_STMT {
@@ -343,7 +278,7 @@ def UNARY_PREFIX {
 
 /* ---- Atom ---- */
 def PRIMARY {
-    NUMBER;
+      NUMBER;
     / STRING;
     / CHAIN;
     / ("("; VALUE; ")";);
@@ -445,8 +380,6 @@ def comment_rule {
 | `newline` | Meta-grammar `comment_rule` | Built-in — matches a newline character |
 
 ---
-
-I am not a native English speaker, so some of my expressions may seem strange.
 
 This is not all.
 
