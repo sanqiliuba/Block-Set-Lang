@@ -77,6 +77,7 @@ def STMT {
     / VAR_STMT;
     / ASSIGN_STMT;
     / COPY_STMT;
+    / REFER_STMT;
     / LOOP_STMT;
     / IF_STMT;
     / BREAK_STMT;
@@ -141,6 +142,10 @@ def ASSIGN_STMT {
 
 def COPY_STMT {
     CHAIN; "#"; BLOCK; END;
+};
+
+def REFER_STMT {
+    CHAIN; "="; CHAIN; END;
 };
 ```
 
