@@ -23,8 +23,8 @@ def LETTER    {
 };
 
 def IDENTIFIER {
-    (LETTER; / "_";) (N = 1);
-    (nospace; (LETTER; / DIGIT; / "_";);) (N >= 0);
+    (LETTER; / "_"; / cjk_char;) (N = 1);
+    (nospace; (LETTER; / DIGIT; / "_"; / cjk_char);) (N >= 0);
 } not {
     KEYWORD_SET;  /* --- 未定义 --- 由语言实现提供的一组保留关键字，如 "block"、"var"、"if"、"loop" 等 */
 };
@@ -54,10 +54,6 @@ def BODY_BLOCK_STMT {
     BODY_BLOCK; END;
 };
 
-def PAREN_BLOCK {
-    "("; STMT (N >= 1); ")";
-};
-
 def END {
     ";"; / "end";
 };
@@ -72,8 +68,13 @@ def END {
 *按惯例，名为 `main` 的 `block` 是主程序。*
 
 ```Block Set Def
+def COMPILER {
+    "compiler"; "|"; STRING; END;
+};
+
 def STMT {
-      BLOCK_STMT;
+      COMPILER;
+    / BLOCK_STMT;
     / VAR_STMT;
     / ASSIGN_STMT;
     / COPY_STMT;
@@ -82,7 +83,6 @@ def STMT {
     / IF_STMT;
     / BREAK_STMT;
     / CONTINUE_STMT;
-    / CALL_STMT;
     / CHAIN_STMT;
     / BACK_STMT;
     / PATH_STMT;
@@ -98,8 +98,8 @@ def STMT {
 ```Block Set Def
 def BLOCK_STMT {
     "block"; IDENTIFIER; BRACKET_PARAMS (N = [0,1]);
-    (":"; TYPE;)(N = [0,1]);
-    BODY_BLOCK; END;
+    (":"; TYPE;)(N = [0,1]); "|";
+    STMT; END;
 };
 
 def BACK_STMT {
@@ -111,7 +111,7 @@ def BRACKET_PARAMS {
 };
 
 def DECL {
-    IDENTIFIER; (":"; TYPE(N >= 1);)(N = [1,0]);
+    IDENTIFIER; (":"; TYPE(N = 1);)(N = [1,0]);
 };
 
 def TYPE {
@@ -127,13 +127,13 @@ def TYPE {
 */
 
 def VAR_STMT {
-    "var"; ("|"; DECL;)(N >= 0); END;
+    "var"; "|"; DECL; N >= 1; END;
 };
 ```
 
 ---
 
-## 赋值与拷贝
+## 赋值、拷贝与引用
 
 ```Block Set Def
 def ASSIGN_STMT {
@@ -145,7 +145,7 @@ def COPY_STMT {
 };
 
 def REFER_STMT {
-    CHAIN; "="; CHAIN; END;
+    CHAIN; "="; CHAIN(N = [0,1]); END;
 };
 ```
 
@@ -154,10 +154,6 @@ def REFER_STMT {
 ## 调用
 
 ```Block Set Def
-def CALL_STMT {
-    "call"; BLOCK; END;
-};
-
 def ARG_LIST {
     "["; (BLOCK; (","; BLOCK;)(N >= 0);)(N = [1,0]); "]";
 };
@@ -168,8 +164,8 @@ def CHAIN_STMT {
 };
 
 def CHAIN {
-    (IDENTIFIER; / "$"; / "@";); (PAREN_BLOCK; / ARG_LIST)(N = [1,0]);
-    (("."; / "..";) IDENTIFIER; (PAREN_BLOCK; / ARG_LIST)(N = [1,0]);)(N >= 0);
+    (IDENTIFIER; / "$"; / "@";); ARG_LIST(N = [1,0]);
+    (("."; / "..";) IDENTIFIER; ARG_LIST(N = [1,0]);)(N >= 0);
 };
 
 def BLOCK {
@@ -180,7 +176,7 @@ def BLOCK {
 }
 
 def PATH_STMT {
-    CHAIN; BODY_BLOCK; END;
+    "path"; CHAIN; "|"; BLOCK; END;
 };
 ```
 
@@ -190,11 +186,11 @@ def PATH_STMT {
 
 ```Block Set Def
 def IF_STMT {
-    "if"; VALUE;
+    "if"; VALUE; "|";
         BLOCK;
-    ("elseif"; VALUE;
+    ("elseif"; VALUE; "|";
         BLOCK;)(N >= 0);
-    ("else";
+    ("else"; "|";
         BLOCK;)(N = [0,1]);
     END;
 };
@@ -270,7 +266,7 @@ def TERM {
 };
 
 def MUL_OP {
-    "×"; / "÷"; / "*"; / "/";
+    "×"; / "÷"; / "*"; / "/"; / "%";
 };
 
 /* ---- 一元运算 ---- */
