@@ -1,393 +1,205 @@
-
-Okay, then the meta-grammar is actually provided at the end of the document.
-
-You can skip to the end and come back after you finish watching.
-
 # Block Set
 
-## Lexical / Token Definitions
+## 语法定义
+
+本语言使用 `Block Set Def` 元语法，是一种 `C风格` 的，类似于 `BNF` 的上下文无关文法。
+
+ `Block Set Def` 的自举，以及规范，可以跳转到文档的查看附录。
+
+本语言使用一个反斜杠 `\` 转义。
 
 ```Block Set Def
-def DIGIT     { "0"; / "1"; / "2"; / "3"; / "4"; / "5"; / "6"; / "7"; / "8"; / "9"; };
+def end {
+    ",";
+};
 
-def NUMBER    { DIGIT; (nospace; DIGIT;)(N >= 0); };
-/* nospace: built-in assertion — matching fails if whitespace is encountered here */
+def digital {
+    "0"; / "1"; / "2"; / "3"; / "4"; / "5"; / "6"; / "7"; / "8"; / "9";
+};
 
-def LETTER    {
-      "A"; / "B"; / "C"; / "D"; / "E"; / "F"; / "G"; / "H"; / "I"; / "J";
-    / "K"; / "L"; / "M"; / "N"; / "O"; / "P"; / "Q"; / "R"; / "S"; / "T";
-    / "U"; / "V"; / "W"; / "X"; / "Y"; / "Z";
-    / "a"; / "b"; / "c"; / "d"; / "e"; / "f"; / "g"; / "h"; / "i"; / "j";
-    / "k"; / "l"; / "m"; / "n"; / "o"; / "p"; / "q"; / "r"; / "s"; / "t";
+def letter {
+      "a"; / "b"; / "c"; / "d"; / "e"; / "f"; / "g";
+    / "h"; / "i"; / "j"; / "k"; / "l"; / "m"; / "n";
+    / "o"; / "p"; / "q"; / "r"; / "s"; / "t";
     / "u"; / "v"; / "w"; / "x"; / "y"; / "z";
+    / "A"; / "B"; / "C"; / "D"; / "E"; / "F"; / "G";
+    / "H"; / "I"; / "J"; / "K"; / "L"; / "M"; / "N";
+    / "O"; / "P"; / "Q"; / "R"; / "S"; / "T";
+    / "U"; / "V"; / "W"; / "X"; / "Y"; / "Z";
 };
 
-def IDENTIFIER {
-    (LETTER; / "_";) (N = 1);
-    (nospace; (LETTER; / DIGIT; / "_";);) (N >= 0);
+def number {
+    digital(N >= 1);
+};
+
+def ui_cjk {
+    // --- 即中日韩统一文字。取决于语言实现平台，此处不做该级别定义 ---
+};
+
+def any_char {
+    // --- 即任意单个字符。取决于语言实现平台，此处不做该级别定义 ---
+};
+
+def escape {
+    "\\"; any_char;
+};
+
+def string {
+    "\""; (escape; / any_char;)(N >= 0); "\"";
+};
+
+def identifier_base {
+    (letter; / ui_cjk; / "_"; );
+    (nospace; (letter; / ui_cjk; / digital; / "_"; );)(N >= 0);
 } not {
-    KEYWORD_SET;  /* --- undefined --- A set of reserved keywords provided by the language implementation, such as "block", "var", "if", "loop", etc. */
+      key_set;
 };
 
-def COMMENT {
-    "//"; ANY_STR; "\n";
-    / "/*"; ANY_STR; "*/";
-};
-/* ANY_STR: --- undefined --- Matches any sequence of characters excluding the terminator. A placeholder; actual behavior is implemented by the lexical layer per line/block comment rules. */
-
-def STRING {
-    "\""; (any_char;)(N >= 0); "\"";
-};
-/* any_char: --- undefined --- Built-in TOKEN; matches any single character (excluding EOF). */
-```
-
----
-
-## Structural Blocks
-
-```Block Set Def
-def BODY_BLOCK {
-    "{"; STMT (N >= 0); "}";
+def identifier {
+      identifier_base;
+    / string;
 };
 
-def BODY_BLOCK_STMT {
-    BODY_BLOCK; END;
+def block_block {
+    "{"; blockset(N >= 0); ("---"; statement(N >= 0);)(N = [0,1]); "}";
 };
 
-def PAREN_BLOCK {
-    "("; STMT (N >= 1); ")";
+def statement_block {
+    "{"; statement(N >= 0); "}";
 };
 
-def END {
-    ";"; / "end";
-};
-```
-
----
-
-## Statement Aggregation
-
-*The entire file is treated as a single `block`.*
-
-*By convention, the `block` named `main` is the main program.*
-
-```Block Set Def
-def COMPILER {
-    "compiler"; STRING; END;
+def blockset {
+    (identifier; / "@";); ":"; (para_list_Statement(N = [0,1]); block;)(N = [0,1]); end;
 };
 
-def STMT {
-      COMPILER;
-    / BLOCK_STMT;
-    / VAR_STMT;
-    / ASSIGN_STMT;
-    / COPY_STMT;
-    / LOOP_STMT;
-    / IF_STMT;
-    / BREAK_STMT;
-    / CONTINUE_STMT;
-    / CALL_STMT;
-    / CHAIN_STMT;
-    / BACK_STMT;
-    / PATH_STMT;
-    / COMMENT;
-    / BODY_BLOCK_STMT;
-};
-```
-
----
-
-## Block & Variable Statements
-
-```Block Set Def
-def BLOCK_STMT {
-    "block"; IDENTIFIER; BRACKET_PARAMS (N = [0,1]);
-    (":"; TYPE;)(N = [0,1]);
-    BODY_BLOCK; END;
+def para_list_Statement {
+    "("; ((identifier_base; ":"; block;)(N = [0,1]); end;)(N >= 0); ")";
 };
 
-def BACK_STMT {
-    "back"; END;
+def block {
+      block_block;
+    / value;
+    / array;
 };
 
-def BRACKET_PARAMS {
-    "["; DECL; (","; DECL;)(N >= 0); "]";
+def statement {
+      if_statement;
+    / loop_statement;
+    / break_statement;
+    / continue_statement;
+    / blockset_statement;
+    / blockset_type_statement;
+    / blockset_same_statement;
 };
 
-def DECL {
-    IDENTIFIER; (":"; TYPE(N >= 1);)(N = [1,0]);
+def if_statement {
+     "if"; value;
+        statement_block;
+    ("elseif"; value;
+        statement_block;)(N >= 0);
+    ("else";
+        statement_block;)(N = [0,1]);
+    end;
 };
 
-def TYPE {
-    CHAIN;
+def loop_statement {
+    "loop"; identifier; statement_block; end;
 };
 
-/*
-  TYPE resolves to the data structure of the block returned by CHAIN —
-  its var declarations and bracket parameters.
-  Some base types (e.g., Int, String) are provided by the system.
-  Beyond those, every block's structure is itself a type —
-  there is no separate type definition syntax.
-  It determines what can be passed via <-.
-*/
-
-def VAR_STMT {
-    "var"; ("|"; DECL;)(N >= 0); END;
-};
-```
-
----
-
-## Assignment & Copy
-
-```Block Set Def
-def ASSIGN_STMT {
-    CHAIN; "<-"; BLOCK; END;
+def break_statement {
+    "break"; (identifier; / digital;)(N = [0,1]); end;
 };
 
-def COPY_STMT {
-    CHAIN; "#"; BLOCK; END;
-};
-```
-
----
-
-## Invocation
-
-```Block Set Def
-def CALL_STMT {
-    "call"; BLOCK; END;
+def continue_statement {
+    "continue"; (identifier; / digital;)(N = [0,1]); end;
 };
 
-def ARG_LIST {
-    "["; (BLOCK; (","; BLOCK;)(N >= 0);)(N = [1,0]); "]";
+def chain {
+    ("$"; / "@"; / "fn";); (("~"; / "~";); identifier; para_list(N = [0,1]);)(N >= 0);
 };
 
-/* ---- Standalone call that discards the return value ---- */
-def CHAIN_STMT {
-    CHAIN; END;
+def para_list {
+    "("; (block; (","; block;)(N >= 0);)(N = [0,1]); ")";
 };
 
-def CHAIN {
-    (IDENTIFIER; / "$"; / "@";); (PAREN_BLOCK; / ARG_LIST)(N = [1,0]);
-    (("."; / "..";) IDENTIFIER; (PAREN_BLOCK; / ARG_LIST)(N = [1,0]);)(N >= 0);
+def blockset_statement {
+    (chain; / identifier_base;) "#"; block; end;
 };
 
-def BLOCK {
-      STMT;
-    / VALUE;
-    / CHAIN;
-    / BODY_BLOCK;
+def blockset_type_statement {
+    (chain; / identifier_base;) "<-"; block; end;
+};
+
+def blockset_same_statement {
+    (chain; / identifier_base;) "="; block; end;
+};
+
+def value {
+    value_not;
+};
+
+def value_not {
+    "NOT"(N = [0,1]); value_and_or;
+};
+
+def value_and_or {
+    value_compare; (("AND"; / "OR";); value_compare;)(N = [0,1]);
+};
+
+def value_compare {
+    value_equal; ((">?"; / "<?"; / ">=?"; / "<=?";); value_equal;)(N = [0,1]);
+};
+
+def value_equal {
+    value_add; (("=?"; / "=??"; / "!=?"; / "!=??";); value_add;)(N = [0,1]);
+};
+
+def value_add {
+    value_mul; (("+"; / "-";); value_mul;)(N >= 0);
+};
+
+def value_mul {
+    value_base; (("*"; / "×"; / "/"; / "÷";); value_base;)(N >= 0);
+};
+
+def value_base {
+      chain;
+    / "-"(N = [0,1]); number; (nospace; "."; nospace; number;)(N = [0,1]);
+    / string;
+    / "("; value; ")";
+    / identifier_base;
+};
+
+def array {
+    "["; (block; ("," block;)(N >= 0);)(N = [0,1]); "]";
 }
 
-def PATH_STMT {
-    CHAIN; BODY_BLOCK; END;
+def annotation {
+      "//"; any_char(N >= 0); newline;
+    / "/*"; any_char(N >= 0); "*/";
 };
 ```
 
----
+## 语义说明
 
-## Control Flow
+ `Block Set` 是 `JSON` 的超集，且独立于 `JavaScript` 。
 
-```Block Set Def
-def IF_STMT {
-    "if"; VALUE;
-        BLOCK;
-    ("elseif"; VALUE;
-        BLOCK;)(N >= 0);
-    ("else";
-        BLOCK;)(N = [0,1]);
-    END;
-};
+该语言的数据结构就是 `JSON` 对象。
 
-def LOOP_STMT {
-    "loop"; LOOP_LABEL (N = [0,1]); "|"; BLOCK; END;
-};
+### 可见性
 
-def BREAK_STMT {
-    "break"; (LOOP_LABEL; / NUMBER;)(N = [0,1]);
-};
+在一个 `block` 内，所有链式访问都是有具体指向的。
 
-def CONTINUE_STMT {
-    "continue"; (LOOP_LABEL; / NUMBER;)(N = [0,1]);
-};
+如果是 `identifier_base` 则表示局部变量。
 
-def LOOP_LABEL {
-    IDENTIFIER;
-};
-```
+其中，在圆括号内进行声明的，视为虚拟变量。
 
-*`LOOP_LABEL` is only valid within a `loop` statement and does not share a namespace with `block`.*
+非虚拟变量的局部变量，每次调用开始时都视为 `null` 值的空 `block` 。
+
+ `Block Set` 的数据结构与 `JSON` 是同像的。
+
+ `Block Set` 运行结束后，所有数据就是最终的 `JSON` 输出。
 
 ---
-
-## VALUE — Expressions
-
-*Precedence from low to high:*
-
-> **OR  →  AND  →  comparison  →  +/-  →  ×÷*/  →  NOT/-  →  atom**
-
-```Block Set Def
-def VALUE {
-    LOGIC_OR;
-};
-
-/* ---- Logical OR ---- */
-def LOGIC_OR {
-    LOGIC_AND;
-    ("OR"; LOGIC_AND;)(N >= 0);
-};
-
-/* ---- Logical AND ---- */
-def LOGIC_AND {
-    COMPARE;
-    ("AND"; COMPARE;)(N >= 0);
-};
-
-/* ---- Comparison ---- */
-def COMPARE {
-    SUM;
-    (COMPARE_OP; SUM;)(N = [0,1]);
-};
-
-def COMPARE_OP {
-    ">=?"; / "=?"; / "<=?"; / ">?"; / "<?"; / "!=?";
-};
-
-/* ---- Addition / Subtraction ---- */
-def SUM {
-    TERM;
-    (ADD_OP; TERM;)(N >= 0);
-};
-
-def ADD_OP {
-    "+"; / "-";
-};
-
-/* ---- Multiplication / Division ---- */
-def TERM {
-    UNARY;
-    (MUL_OP; UNARY;)(N >= 0);
-};
-
-def MUL_OP {
-    "×"; / "÷"; / "*"; / "/";
-};
-
-/* ---- Unary operations ---- */
-def UNARY {
-    UNARY_PREFIX; PRIMARY;
-};
-
-def UNARY_PREFIX {
-    ("NOT"; / "-";)(N = [0,1]);
-};
-
-/* ---- Atom ---- */
-def PRIMARY {
-      NUMBER;
-    / STRING;
-    / CHAIN;
-    / ("("; VALUE; ")";);
-};
-```
-
+未完工
 ---
-
-## Meta-Grammar (Notation)
-
-*Greedy matching: repetitions default to matching as many times as possible. A lookahead checks the next TOKEN — if the next TOKEN can start the continuation of the current block, greed stops and matching proceeds.*
-
-*The name is Block Set Def.*
-
-```Block Set Def
-def grammar {
-    def_rule (N >= 0);
-};
-
-def ident {
-    (alpha; / cjk_char;) (N = 1);
-    (alpha; / cjk_char; / digit_seq; / "_";) (N >= 0);
-} not {
-    "def"; / "not"; / "N"; / "nospace";
-};
-/*
-  alpha:     --- undefined --- Built-in TOKEN; matches a single ASCII letter [A-Za-z].
-  cjk_char:  --- undefined --- Built-in TOKEN; matches a single CJK unified ideograph.
-  digit_seq: --- undefined --- Built-in TOKEN; matches consecutive digits [0-9]+.
-*/
-
-def def_rule {
-    "def"; ident; "{"; alt (N = [0,1]); "}";
-    ("not"; "{"; alt; "}";) (N = [0,1]);
-    ";";
-};
-
-// not block: after the preceding match completes, the same TOKEN stream
-// is matched against the not block's alt.
-// If the not block matches exhaustively, the preceding match is deemed a failure.
-
-def alt {
-    seq (N >= 1);
-    ("/"; seq (N >= 1);) (N >= 0);
-};
-
-// / denotes ordered choice
-
-def seq {
-    (
-        ident;
-        / "\""; any_char; "\"";
-        / paren;
-    );
-    quant (N = [0,1]);
-    / "nospace";
-    ";";
-};
-
-def paren {
-    "("; alt (N >= 1); ")";
-};
-
-def quant_term {
-    "N";
-    (
-        (">"; / "<"; / ">="; / "<=";); digit_seq;
-        / "="; (
-            digit_seq;
-            / "["; digit_seq (N >= 1); (","; digit_seq;) (N >= 0); "]";
-            // brackets here denote a set, not an interval.
-        );
-    );
-};
-
-def quant {
-    "("; quant_term; (","; quant_term;) (N >= 0); ")";
-};
-
-def comment_rule {
-    "/*"; any_char (N >= 0); "*/";
-    / "//"; any_char (N >= 0); newline;
-};
-/* newline: --- undefined --- Built-in TOKEN; matches a newline character. */
-```
-
----
-
-## Undefined TOKEN Summary
-
-| TOKEN | Location | Description |
-|---|---|---|
-| `KEYWORD_SET` | IDENTIFIER's `not` block | Set of reserved language keywords, provided by the implementation |
-| `ANY_STR` | COMMENT | Matches any character sequence excluding the terminator; implemented by the lexical layer |
-| `any_char` | STRING, comment_rule | Built-in — matches any single character (excluding EOF) |
-| `alpha` | Meta-grammar `ident` | Built-in — matches a single ASCII letter |
-| `cjk_char` | Meta-grammar `ident` | Built-in — matches a single CJK character |
-| `digit_seq` | Meta-grammar `quant_term`, `ident` | Built-in — matches consecutive digits |
-| `newline` | Meta-grammar `comment_rule` | Built-in — matches a newline character |
-
----
-
-This is not all.
-
-I may not be able to reply quickly — my time online is limited.
